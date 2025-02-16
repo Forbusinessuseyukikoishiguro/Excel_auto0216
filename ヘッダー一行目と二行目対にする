@@ -1,0 +1,49 @@
+import pandas as pd
+
+
+def read_excel_headers_and_first_row(file_path):
+    """
+    Excelファイルを読み取り、ヘッダーと2行目の値をペアにして返す関数
+
+    Args:
+        file_path (str): Excelファイルのパス
+
+    Returns:
+        dict: ヘッダーと2行目の値のペア
+    """
+    try:
+        # Excelファイルを読み込む
+        df = pd.read_excel(file_path)
+
+        # ヘッダー（1行目）を取得
+        headers = df.columns.tolist()
+
+        # 2行目の値を取得（インデックスが0から始まるため、1行目は[0]）
+        first_row_values = df.iloc[0].tolist()
+
+        # ヘッダーと値をペアにする
+        header_value_pairs = dict(zip(headers, first_row_values))
+
+        return header_value_pairs
+
+    except Exception as e:
+        print(f"エラーが発生しました: {str(e)}")
+        return None
+
+
+# 使用例
+file_path = r"C:\Users\yukik\Desktop\ex\in1.xlsx"
+result = read_excel_headers_and_first_row(file_path)
+
+if result:
+    print("\nヘッダーと2行目の値のペア:")
+    for header, value in result.items():
+        print(f"{header}: {value}")
+
+# 辞書として使用する例
+if result:
+    print("\n辞書として使用する例:")
+    # 特定のヘッダーの値を取得
+    for header in result:
+        print(f"{header}の値を取得: {result[header]}")
+    # 2025/02/16pythonExcelヘッダー一行目と二行目対にする
