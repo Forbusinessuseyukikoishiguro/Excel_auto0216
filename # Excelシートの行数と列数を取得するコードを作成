@@ -1,0 +1,47 @@
+import pandas as pd
+
+
+def get_excel_dimensions(file_path):
+    """
+    Excelファイルの行数と列数を取得する関数
+
+    Args:
+        file_path (str): Excelファイルのパス
+
+    Returns:
+        tuple: (行数, 列数, 列名のリスト)
+    """
+    try:
+        # Excelファイルを読み込む
+        df = pd.read_excel(file_path)
+
+        # 行数を取得（インデックスは0から始まるため、実際の行数を取得）
+        num_rows = len(df)
+
+        # 列数を取得
+        num_cols = len(df.columns)
+
+        # 列名（ヘッダー）のリストを取得
+        column_names = df.columns.tolist()
+
+        return num_rows, num_cols, column_names
+
+    except Exception as e:
+        print(f"エラーが発生しました: {str(e)}")
+        return None
+
+
+# 使用例
+file_path = r"C:\Users\yukik\Desktop\ex\in1.xlsx"
+result = get_excel_dimensions(file_path)
+
+if result:
+    num_rows, num_cols, column_names = result
+    print(f"\nファイル: {file_path}")
+    print(f"行数: {num_rows}")
+    print(f"列数: {num_cols}")
+    print("\n列名一覧:")
+    for i, col in enumerate(column_names, 1):
+        print(f"{i}. {col}")
+
+# Excelシートの行数と列数を取得するコードを作成
