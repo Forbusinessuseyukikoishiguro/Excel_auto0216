@@ -1,0 +1,54 @@
+import os
+import sys
+
+# チェックするフォルダの絶対パス
+FOLDER_PATH = r"C:\Users\yukik\Desktop\AutoPaymentProcess\maininput"
+
+
+def check_xlsx_file():
+    try:
+        # フォルダが存在するかチェック
+        if not os.path.exists(FOLDER_PATH):
+            print(f"CK001,9,SE001,予期せぬエラー: フォルダが存在しません {FOLDER_PATH}")
+            return 9  # システムエラー
+
+        # 確認用（フォルダの絶対パスと内容を表示）
+        print(f"確認用: フォルダの絶対パス = {os.path.abspath(FOLDER_PATH)}")
+        print("フォルダ内のファイル一覧:", os.listdir(FOLDER_PATH))
+
+        # フォルダ内のファイル一覧を取得
+        with os.scandir(FOLDER_PATH) as entries:
+            files = [entry.name for entry in entries]
+
+        # ファイルがない場合（警告のみ）
+        if len(files) == 0:
+            print("CK001,1,WA001,ファイルが配置されていない")
+            return 1  # 警告（次の処理は継続可能）
+
+        # `.xlsx` ファイルのリストを作成
+        xlsx_files = [f for f in files if f.lower().endswith(".xlsx")]
+
+        # 2つ以上のファイルがある場合（エラー）
+        if len(files) > 1:
+            print("CK001,2,UE003,2つ以上のファイルが存在している")
+            return 2  # ユーザーエラー
+
+        # 1つのファイルがあるが `.xlsx` ではない場合（エラー）
+        if len(xlsx_files) == 0:
+            print("CK001,2,UE002,ファイル形式誤り 一つファイルがあるが .xlsx ではない")
+            return 2  # ユーザーエラー
+
+        # 正常（`.xlsx` ファイルが1つだけ存在）
+        print("CK001,0,NM001,maininputフォルダに.xlsxファイルが1つ存在している")
+        return 0  # 正常
+
+    except Exception as e:
+        print(f"CK001,9,SE001,予期せぬエラー: {e}")
+        return 9  # システムエラー
+
+
+if __name__ == "__main__":
+    exit_code = check_xlsx_file()
+    sys.exit(exit_code)
+    
+    #CK001
