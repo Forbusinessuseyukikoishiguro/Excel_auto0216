@@ -1,0 +1,46 @@
+import sys
+from datetime import datetime
+
+
+
+
+def check_yyyymm_format(input_str):
+    """
+    YYYYMM形式のチェックを行う。
+    - 正常: ステータス 0, メッセージ ID001
+    - ユーザーエラー: ステータス 2, メッセージ UE013
+    - システムエラー: ステータス 9, メッセージ SE001
+    """
+    try:
+        # 引数が指定されているかチェック
+        if len(sys.argv) < 2:
+            print("IDCK000,9,SE001,予期せぬエラー: 引数なし")
+            return 9  # システムエラー
+
+
+        # YYYYMM の形式かチェック
+        datetime.strptime(input_str, "%Y%m")
+        print(f"IDCK000,0,ID001,{input_str} は yyyymm 形式")
+        return 0  # 正常
+
+
+    except ValueError:
+        print(f"IDCK000,2,UE013,{input_str} は yyyymm 形式ではない")
+        return 2  # ユーザーエラー
+
+
+    except Exception as e:
+        print(f"IDCK000,9,SE001,予期せぬエラー: {e}")
+        return 9  # システムエラー
+
+
+
+
+if __name__ == "__main__":
+    input_str = sys.argv[1] if len(sys.argv) > 1 else ""
+    exit_code = check_yyyymm_format(input_str)
+    sys.exit(exit_code)
+# Ck000のテスト：ログなし基本実装のみですが参考OK
+
+
+
