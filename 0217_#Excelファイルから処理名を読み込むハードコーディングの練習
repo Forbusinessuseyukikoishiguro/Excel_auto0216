@@ -1,0 +1,162 @@
+# 必要なライブラリをインポート
+import logging
+import functools
+import time
+from datetime import datetime
+import os
+import pandas as pd
+
+
+def load_process_names(excel_path):
+    """Excelから処理名を読み込む"""
+    try:
+        df = pd.read_excel(excel_path)
+        process_names = df["処理名"].tolist()
+        print(f"\n読み込んだ処理名一覧:")
+        for i, name in enumerate(process_names):
+            print(f"{i}: {name}")
+        return process_names
+    except Exception as e:
+        print(f"処理名の読み込みエラー: {str(e)}")
+        return []
+
+
+def setup_logger(log_dir="logs"):
+    """ロガーの設定"""
+    os.makedirs(log_dir, exist_ok=True)
+    logger = logging.getLogger("ProcessLogger")
+    logger.setLevel(logging.DEBUG)
+
+    # 既存のハンドラをクリア
+    logger.handlers = []
+
+    # ファイル出力の設定
+    log_file = os.path.join(log_dir, f'process_{datetime.now().strftime("%Y%m%d")}.log')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+
+    # コンソール出力の設定
+    console_handler = logging.StreamHandler()
+
+    # フォーマッターの設定
+    formatter = logging.Formatter(
+        "%(asctime)s [%(status)s] %(process_name)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    print(f"ログファイル: {log_file}")
+    return logger
+
+
+class ProcessLogger:
+    def __init__(self, excel_path, log_dir="logs"):
+        self.process_names = load_process_names(excel_path)
+        self.logger = setup_logger(log_dir)
+
+    def log_process(self, process_name_index):
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                try:
+                    process_name = self.process_names[process_name_index]
+                except (IndexError, TypeError):
+                    process_name = func.__name__
+                    print(
+                        f"警告: インデックス {process_name_index} が無効です。関数名を使用します。"
+                    )
+
+                extra = {"process_name": process_name, "status": "正常"}
+
+                start_time = time.time()
+                self.logger.info("開始", extra=extra)
+
+                try:
+                    result = func(*args, **kwargs)
+                    process_time = time.time() - start_time
+                    self.logger.info(f"終了 ({process_time:.2f}秒)", extra=extra)
+                    return result
+
+                except Exception as e:
+                    process_time = time.time() - start_time
+                    extra["status"] = "異常"
+                    self.logger.error(
+                        f"エラー発生 ({process_time:.2f}秒): {str(e)}", extra=extra
+                    )
+                    raise
+
+            return wrapper
+
+        return decorator
+
+
+def test_logger():
+    """ロガーのテスト実行"""
+    # Excelファイルのパス
+    excel_path = r"C:\Users\yukik\Desktop\ex\process_names.xlsx"
+
+    # ProcessLoggerのインスタンス作成
+    process_logger = ProcessLogger(excel_path)
+
+    # 正常処理のテスト
+    @process_logger.log_process(0)
+    def test_success():
+        print("正常処理を実行中...")
+        time.sleep(1)
+        return "成功"
+
+    # エラー処理のテスト
+    @process_logger.log_process(1)
+    def test_error():
+        print("エラー処理を実行中...")
+        time.sleep(0.5)
+        raise ValueError("テストエラー")
+
+    # 無効なインデックスのテスト
+    @process_logger.log_process(999)
+    def test_invalid_index():
+        print("無効なインデックスのテスト実行中...")
+        time.sleep(0.3)
+        return "完了"
+
+    try:
+        print("\n=== テスト開始 ===")
+
+        print("\n1. 正常処理のテスト")
+        result = test_success()
+        print(f"結果: {result}")
+
+        print("\n2. エラー処理のテスト")
+        try:
+            test_error()
+        except Exception as e:
+            print(f"予期されたエラー: {str(e)}")
+
+        print("\n3. 無効なインデックスのテスト")
+        result = test_invalid_index()
+        print(f"結果: {result}")
+
+        print("\n=== テスト完了 ===")
+
+    except Exception as e:
+        print(f"予期しないエラーが発生: {str(e)}")
+
+
+if __name__ == "__main__":
+    test_logger()
+
+#2025/1/27
+#のコードの主な特徴：
+
+#処理名管理:
+#Excelファイルから処理名を読み込む
+#インデックスベースで処理名を指定してログ出力
+#ログ形式は以下の通り
+
+#ログ形式
+#時刻、状態正常異常、処理名、実行時間
+
+#テストOK
