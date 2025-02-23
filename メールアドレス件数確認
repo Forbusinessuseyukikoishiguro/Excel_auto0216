@@ -1,0 +1,85 @@
+#メールアドレス件数確認
+def check_email_count(df):
+    """
+    TO、CC、BCC列のメールアドレス件数が5件以内かチェックする関数
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        チェック対象のデータフレーム
+        
+    Returns:
+    --------
+    StatusResult
+        チェック結果を格納したStatusResultオブジェクト
+    """
+    try:
+        print("\n=== メールアドレス件数チェック開始 ===")
+        count_errors = []
+
+        # チェック対象の列
+        email_columns = ['TO', 'CC', 'BCC']
+        
+        # データが存在する行のみを処理
+        for idx, row in df.iterrows():
+            row_num = idx + 2  # Excel行番号（ヘッダー行考慮）
+            
+            for column in email_columns:
+                if column not in df.columns:
+                    continue
+                    
+                value = row[column]
+                if pd.isna(value):
+                    continue
+                
+                # メールアドレスをリスト化
+                if isinstance(value, str):
+                    # カンマで分割し、空白を削除
+                    email_list = [
+                        email.strip() 
+                        for email in value.split(',') 
+                        if email.strip()
+                    ]
+                    
+                    # 件数をカウント
+                    email_count = len(email_list)
+                    print(f"行{row_num} - {column}: {email_count}件")
+                    
+                    # 5件超過チェック
+                    if email_count > 5:
+                        error_msg = (
+                            f"行{row_num} - {column}: "
+                            f"メールアドレスは5件以内にしてください（現在: {email_count}件）"
+                        )
+                        count_errors.append(error_msg)
+                        print(f"  → エラー: {error_msg}")
+                    else:
+                        print("  → OK")
+
+        # 結果の返却
+        if count_errors:
+            return StatusResult(
+                status_id=Status.USER_ERROR.value,
+                status_type=Status.USER_ERROR.name,
+                details={
+                    "error_type": "EMAIL_COUNT_ERROR",
+                    "count_errors": count_errors,
+                    "total_error_count": len(count_errors)
+                }
+            )
+        
+        return StatusResult(
+            status_id=Status.NORMAL.value,
+            status_type=Status.NORMAL.name,
+            details={"message": "メールアドレス件数チェック正常終了"}
+        )
+
+    except Exception as e:
+        error_msg = f"SE001: メールアドレス件数チェックでエラーが発生しました: {str(e)}"
+        print(f"\n{error_msg}")
+        return StatusResult(
+            status_id=Status.SYSTEM_ERROR.value,
+            status_type=Status.SYSTEM_ERROR.name,
+            details={"system_error": error_msg}
+        )
+
