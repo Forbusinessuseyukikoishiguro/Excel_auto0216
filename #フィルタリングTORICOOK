@@ -1,0 +1,139 @@
+import pandas as pd
+import numpy as np
+from openpyxl import load_workbook
+from enum import IntEnum
+from datetime import datetime
+from pathlib import Path
+
+
+class Status(IntEnum):
+    """ステータスコード定義"""
+
+    NORMAL = 0  # 正常
+    WARNING = 1  # 警告
+    USER_ERROR = 2  # ユーザーエラー
+    SYSTEM_ERROR = 9  # システムエラー
+
+
+def debug_print(message):
+    """デバッグ情報を出力する関数"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[DEBUG {timestamp}] {message}")
+
+
+def get_available_sheets(file_path):
+    """
+    Excelファイルの利用可能なシートを取得
+    Args:
+        file_path (str): Excelファイルのパス
+    Returns:
+        list: 利用可能なシート名のリスト
+    """
+    try:
+        debug_print(f"ファイル読み込み: {file_path}")
+        xls = pd.ExcelFile(file_path)
+        sheets = xls.sheet_names
+        debug_print(f"利用可能なシート: {sheets}")
+        return sheets
+    except Exception as e:
+        debug_print(f"シート一覧取得エラー: {str(e)}")
+        return []
+
+
+class ToricoProcessor:
+    """TORICO列の処理を行うクラス"""
+
+    def __init__(self, file_path, sheet_name=None):
+        """初期化"""
+        self.file_path = file_path
+        self.available_sheets = get_available_sheets(file_path)
+
+        # シート名が指定されていない場合は最初のシートを使用
+        if sheet_name is None and self.available_sheets:
+            self.sheet_name = self.available_sheets[0]
+            debug_print(f"デフォルトシートを使用: {self.sheet_name}")
+        else:
+            self.sheet_name = sheet_name
+
+        self.df = None
+        self.filtered_df = None
+
+    def validate_sheet(self):
+        """シート名の検証"""
+        if not self.available_sheets:
+            debug_print("利用可能なシートがありません")
+            return False
+
+        if self.sheet_name not in self.available_sheets:
+            debug_print(f"シート '{self.sheet_name}' が見つかりません")
+            debug_print(f"利用可能なシート: {self.available_sheets}")
+            return False
+
+        return True
+
+    def process_data(self):
+        """データ処理の実行"""
+        try:
+            # シート名の検証
+            if not self.validate_sheet():
+                return Status.USER_ERROR
+
+            # データ読み込み
+            debug_print(f"\nシート '{self.sheet_name}' からデータを読み込みます")
+            self.df = pd.read_excel(self.file_path, sheet_name=self.sheet_name)
+            debug_print(f"データ読み込み完了: {len(self.df)}行")
+            debug_print(f"列一覧: {list(self.df.columns)}")
+
+            # TOROCOフィルタリング
+            if "TORICO" not in self.df.columns:
+                debug_print("エラー: TORICO列が存在しません")
+                return Status.USER_ERROR
+
+            # フィルタリング実行
+            self.filtered_df = self.df[self.df["TORICO"].notna()].copy()
+
+            # 結果の表示
+            debug_print(f"\nフィルタリング結果:")
+            debug_print(f"- 元データ: {len(self.df)}行")
+            debug_print(f"- フィルタリング後: {len(self.filtered_df)}行")
+            debug_print(f"- 除外された行数: {len(self.df) - len(self.filtered_df)}行")
+
+            debug_print("\n処理が完了しました")
+            return Status.NORMAL
+
+        except Exception as e:
+            debug_print(f"処理エラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+
+def main():
+    """メイン処理"""
+    file_path = r"C:\Users\yukik\Desktop\ex\0223_class\katasample.xlsx"
+
+    try:
+        # 利用可能なシートの確認
+        sheets = get_available_sheets(file_path)
+        if not sheets:
+            debug_print("シートが見つかりません")
+            return
+
+        debug_print(f"\n=== 処理開始 ===")
+
+        # プロセッサーの作成（利用可能な最初のシートを使用）
+        processor = ToricoProcessor(file_path, sheets[0])
+
+        # データ処理
+        status = processor.process_data()
+
+        if status == Status.NORMAL:
+            debug_print("正常に完了しました")
+        else:
+            debug_print("処理に失敗しました")
+
+    except Exception as e:
+        debug_print(f"予期せぬエラー: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
+#フィルタリングTORICOOK
