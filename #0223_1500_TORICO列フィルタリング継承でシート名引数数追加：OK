@@ -1,0 +1,189 @@
+import pandas as pd
+from openpyxl import load_workbook
+
+# グローバル変数の定義
+input_df = None
+filtered_df = None
+debug_mode = True
+
+
+def debug_print(message):
+    """デバッグ情報を出力する関数"""
+    if debug_mode:
+        print(f"[DEBUG] {message}")
+
+
+class BaseExcelProcessor:
+    """基本的なExcel処理を行う基底クラス"""
+
+    def __init__(self, file_path, save_mode=True):
+        """初期化"""
+        self.file_path = file_path
+        self.enable_save = save_mode
+        self.available_sheets = self._get_available_sheets()
+        debug_print(f"ファイルパスを設定: {file_path}")
+        debug_print(f"保存モード: {'有効' if save_mode else '無効'}")
+        debug_print(f"利用可能なシート: {self.available_sheets}")
+
+    def _get_available_sheets(self):
+        """利用可能なシート名を取得"""
+        try:
+            book = load_workbook(self.file_path)
+            return book.sheetnames
+        except Exception as e:
+            debug_print(f"シート一覧取得エラー: {str(e)}")
+            return []
+
+    def validate_sheet_name(self, sheet_name):
+        """シート名の有効性を確認"""
+        if sheet_name in self.available_sheets:
+            return sheet_name
+        debug_print(f"シート '{sheet_name}' が見つかりません")
+        if self.available_sheets:
+            default_sheet = self.available_sheets[0]
+            debug_print(f"デフォルトシート '{default_sheet}' を使用します")
+            return default_sheet
+        return None
+
+    def load_sheet(self, sheet_name):
+        """シートを読み込む基本メソッド"""
+        try:
+            validated_sheet = self.validate_sheet_name(sheet_name)
+            if not validated_sheet:
+                debug_print("有効なシートが見つかりません")
+                return None
+
+            df = pd.read_excel(self.file_path, sheet_name=validated_sheet)
+            debug_print(f"シート '{validated_sheet}' を読み込みました")
+            debug_print(f"データ形状: {df.shape}")
+            return df
+        except Exception as e:
+            debug_print(f"シート読み込みエラー: {str(e)}")
+            return None
+
+    def save_to_excel(self, df, sheet_name):
+        """データフレームをExcelに保存"""
+        if not self.enable_save:
+            debug_print(f"保存モードが無効のため、{sheet_name}への保存をスキップします")
+            return True
+
+        try:
+            debug_print(f"\n=== {sheet_name}への保存開始 ===")
+            book = load_workbook(self.file_path)
+
+            if sheet_name in book.sheetnames:
+                debug_print(f"既存の{sheet_name}シートを削除します")
+                book.remove(book[sheet_name])
+
+            book.save(self.file_path)
+
+            with pd.ExcelWriter(self.file_path, engine="openpyxl", mode="a") as writer:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            debug_print(f"{sheet_name}への保存が完了しました")
+            return True
+
+        except Exception as e:
+            debug_print(f"保存エラー: {str(e)}")
+            return False
+
+
+class ToricoProcessor(BaseExcelProcessor):
+    """TOROCO列の処理に特化したクラス"""
+
+    def __init__(self, file_path, save_mode=True):
+        """初期化"""
+        super().__init__(file_path, save_mode)
+        self.input_sheet = None
+        self.output_sheet = None
+
+    def set_sheet_names(self, input_sheet="input", output_sheet="フィルタリング結果"):
+        """シート名を設定"""
+        self.input_sheet = input_sheet
+        self.output_sheet = output_sheet
+        debug_print(f"入力シート名を設定: {input_sheet}")
+        debug_print(f"出力シート名を設定: {output_sheet}")
+
+    def load_input_sheet(self, sheet_name=None):
+        """入力シートの読み込み"""
+        global input_df
+        try:
+            sheet_to_load = sheet_name or self.input_sheet or "input"
+            debug_print(f"\n=== {sheet_to_load}シートの読み込み開始 ===")
+
+            input_df = self.load_sheet(sheet_to_load)
+            if input_df is None:
+                return False
+
+            if "TOROCO" not in input_df.columns:
+                debug_print("警告: TOROCO列が見つかりません")
+                return False
+
+            self.analyze_toroco_stats()
+            return True
+
+        except Exception as e:
+            debug_print(f"読み込みエラー: {str(e)}")
+            return False
+
+    def analyze_toroco_stats(self):
+        """TOROCO列の統計情報を分析"""
+        debug_print("\nTOROCO列の統計情報:")
+        debug_print(f"空値の数: {input_df['TOROCO'].isna().sum()}")
+        debug_print(f"ユニークな値: {input_df['TOROCO'].unique().tolist()}")
+
+    def filter_toroco_data(self, output_sheet=None):
+        """TOROCO列でフィルタリング"""
+        global filtered_df
+        try:
+            debug_print("\n=== フィルタリング処理開始 ===")
+
+            if input_df is None:
+                debug_print("エラー: 入力データが読み込まれていません")
+                return False
+
+            filtered_df = input_df[input_df["TOROCO"].notna()].copy()
+
+            debug_print(f"フィルタリング結果: {len(filtered_df)}行")
+            debug_print(f"除外された行数: {len(input_df) - len(filtered_df)}")
+
+            if self.enable_save:
+                save_sheet = output_sheet or self.output_sheet or "フィルタリング結果"
+                return self.save_to_excel(filtered_df, save_sheet)
+            return True
+
+        except Exception as e:
+            debug_print(f"フィルタリングエラー: {str(e)}")
+            return False
+
+
+def main():
+    """メイン処理の実行"""
+    file_path = r"C:\Users\yukik\Desktop\ex\0223_class\classtest0223_input.xlsx"
+
+    # プロセッサーの作成とシート名の設定
+    processor = ToricoProcessor(file_path, save_mode=True)
+    processor.set_sheet_names(input_sheet="input", output_sheet="フィルタリング結果")
+
+    # または個別の処理でシート名を指定
+    # processor.load_input_sheet(sheet_name='カスタム入力シート')
+    # processor.filter_toroco_data(output_sheet='カスタム出力シート')
+
+    try:
+        if processor.load_input_sheet():
+            if processor.filter_toroco_data():
+                debug_print("全ての処理が正常に完了しました")
+            else:
+                debug_print("フィルタリング処理に失敗しました")
+        else:
+            debug_print("データ読み込みに失敗しました")
+
+    except Exception as e:
+        debug_print(f"予期せぬエラーが発生: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
+    
+
+#0223_1500_TORICO列フィルタリング継承でシート名引数数追加：OK
