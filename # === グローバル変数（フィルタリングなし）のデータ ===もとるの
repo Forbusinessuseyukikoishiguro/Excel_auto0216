@@ -1,0 +1,147 @@
+import pandas as pd  # pandasをインポート（Excelデータ処理）
+import numpy as np  # numpyをインポート（数値処理）
+from openpyxl import load_workbook  # openpyxlをインポート（Excelファイル操作）
+from enum import IntEnum  # IntEnumをインポート（ステータス管理）
+from datetime import datetime  # datetimeをインポート（ログ用）
+from pathlib import Path  # pathlibをインポート（ファイル管理用）
+
+# ✅ グローバル変数（フィルタリング後 & 全データ保存用）
+GLOBAL_FILTERED_DF = None
+GLOBAL_FULL_DF = None
+
+
+# ✅ ステータスコードの定義（処理結果を示す）
+class Status(IntEnum):
+    NORMAL = 0  # 0: 正常終了
+    WARNING = 1  # 1: 警告あり
+    USER_ERROR = 2  # 2: ユーザーエラー（データミス）
+    SYSTEM_ERROR = 9  # 9: システムエラー（ファイルがないなど）
+
+
+# ✅ デバッグログを出力する関数
+def debug_print(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[DEBUG {timestamp}] {message}")
+
+
+# ✅ Excel処理のベースクラス（共通機能を定義）
+class BaseProcessor:
+    def __init__(self, file_path, sheet_name):
+        """初期化（Excelファイルのパスとシート名を指定）"""
+        self.file_path = file_path
+        self.sheet_name = sheet_name
+        self.df = None  # 元のデータフレーム
+        global GLOBAL_FILTERED_DF, GLOBAL_FULL_DF
+        GLOBAL_FILTERED_DF = None  # 初期化
+        GLOBAL_FULL_DF = None  # 初期化
+        debug_print(f"初期化: {file_path}, シート: {sheet_name}")
+
+    def load_data(self):
+        """Excelデータを読み込む（全シート共通処理）"""
+        try:
+            self.df = pd.read_excel(self.file_path, sheet_name=self.sheet_name)
+            debug_print(f"データ読み込み完了: {len(self.df)}行")
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"エラー: データ読み込み失敗 - {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def process_data(self):
+        """子クラスでオーバーライドするメソッド"""
+        raise NotImplementedError("process_data() をサブクラスで実装してください")
+
+
+# ✅ TORICOシート専用の処理クラス（フィルタリングあり & なし両方対応）
+class ToricoProcessor(BaseProcessor):
+    def process_data(self, filter_torico=True):
+        """データ処理を実行（TORICOフィルタリングの有無を選択可能）"""
+        global GLOBAL_FILTERED_DF, GLOBAL_FULL_DF
+
+        try:
+            debug_print("\n=== 1. データ読み込み ===")
+            if self.load_data() != Status.NORMAL:
+                return Status.SYSTEM_ERROR
+
+            # ✅ フィルタリング有無を選択可能
+            if filter_torico:
+                debug_print("\n=== 2. TORICOフィルタリングあり ===")
+                if self._filter_torico() != Status.NORMAL:
+                    return Status.USER_ERROR
+                GLOBAL_FILTERED_DF = self.filtered_df.copy()
+            else:
+                debug_print("\n=== 2. TORICOフィルタリングなし ===")
+                self.filtered_df = self.df.copy()
+                GLOBAL_FULL_DF = self.df.copy()
+
+            debug_print("\n✅ データ処理が正常に完了しました ✅")
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"処理エラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def _filter_torico(self):
+        """✅ TORICOフィルタリング"""
+        global GLOBAL_FILTERED_DF
+
+        try:
+            if "TORICO" not in self.df.columns:
+                debug_print("エラー: TORICO列が存在しません")
+                return Status.USER_ERROR
+
+            self.filtered_df = self.df[self.df["TORICO"].notna()].copy()
+            debug_print(f"フィルタリング後のデータ: {len(self.filtered_df)}行")
+
+            # ✅ フィルタリング結果をグローバル変数に保存
+            GLOBAL_FILTERED_DF = self.filtered_df.copy()
+
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"フィルタリングエラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def get_full_dataframe(self):
+        """✅ フィルタリングなしのデータを取得"""
+        global GLOBAL_FULL_DF
+        debug_print("\n=== フィルタリングなしのデータを取得 ===")
+        GLOBAL_FULL_DF = self.df.copy()
+        return self.df
+
+
+# ✅ グローバル変数のデータを表示する関数
+def print_global_data():
+    """グローバル変数（フィルタリングあり・なし）の内容を表示"""
+    global GLOBAL_FILTERED_DF, GLOBAL_FULL_DF
+
+    if GLOBAL_FILTERED_DF is not None:
+        debug_print("\n=== グローバル変数（フィルタリングあり）のデータ ===")
+        print(GLOBAL_FILTERED_DF.head())  # 最初の5行を表示
+    else:
+        debug_print("\n❌ フィルタリング後のデータがありません ❌")
+
+    if GLOBAL_FULL_DF is not None:
+        debug_print("\n=== グローバル変数（フィルタリングなし）のデータ ===")
+        print(GLOBAL_FULL_DF.head())  # 最初の5行を表示
+    else:
+        debug_print("\n❌ フルデータがありません ❌")
+
+
+# ✅ メイン処理
+def main():
+    file_path = "C:/Users/yukik/Desktop/ex/0223_class/katasample.xlsx"
+
+    # ✅ TORICO シートの処理（フィルタリングあり）
+    torico_processor = ToricoProcessor(file_path, "correct")
+    torico_processor.process_data(filter_torico=True)
+
+    # ✅ フィルタリングなしのデータを取得
+    torico_processor.get_full_dataframe()
+
+    # ✅ グローバル変数を確認
+    print_global_data()
+
+
+if __name__ == "__main__":
+    main()
+    
+
+# === グローバル変数（フィルタリングなし）のデータ ===もとるの
