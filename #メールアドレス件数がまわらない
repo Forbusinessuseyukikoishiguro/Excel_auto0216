@@ -1,0 +1,222 @@
+import pandas as pd
+import numpy as np
+from openpyxl import load_workbook
+from enum import IntEnum
+from datetime import datetime
+from pathlib import Path
+
+
+# ✅ ステータスコードの定義
+class Status(IntEnum):
+    NORMAL = 0  # 正常
+    WARNING = 1  # 警告
+    USER_ERROR = 2  # ユーザーエラー
+    SYSTEM_ERROR = 9  # システムエラー
+
+
+# ✅ デバッグログ出力関数
+def debug_print(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[DEBUG {timestamp}] {message}")
+
+
+# ✅ Excel処理クラス
+class ToricoProcessor:
+    def __init__(self, file_path, sheet_name):
+        """初期化"""
+        self.file_path = file_path
+        self.sheet_name = sheet_name
+        self.df = None  # 元のデータ
+        self.filtered_df = None  # フィルタリング後のデータ
+        debug_print(f"初期化: {file_path}, シート: {sheet_name}")
+
+    def process_data(self):
+        """4つのチェックを順番に実行"""
+        try:
+            debug_print("\n=== 1. TORICOフィルタリング開始 ===")
+            if self._filter_torico() != Status.NORMAL:
+                return Status.USER_ERROR
+
+            debug_print("\n=== 2. 空欄チェック開始 ===")
+            if self._check_empty_cells() != Status.NORMAL:
+                return Status.USER_ERROR
+
+            debug_print("\n=== 3. 型チェック開始 ===")
+            if self._check_data_types() != Status.NORMAL:
+                return Status.USER_ERROR
+
+            debug_print("\n=== 4. メールアドレスチェック開始 ===")
+            if self._check_email_addresses() != Status.NORMAL:
+                return Status.USER_ERROR
+
+            debug_print("\n✅ 全ての処理が正常に完了しました ✅")
+            return Status.NORMAL
+
+        except Exception as e:
+            debug_print(f"処理エラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def _filter_torico(self):
+        """✅ TORICOフィルタリング"""
+        try:
+            self.df = pd.read_excel(self.file_path, sheet_name=self.sheet_name)
+            debug_print(f"データ読み込み完了: {len(self.df)}行")
+
+            if "TORICO" not in self.df.columns:
+                debug_print("エラー: TORICO列が存在しません")
+                return Status.USER_ERROR
+
+            self.filtered_df = self.df[self.df["TORICO"].notna()].copy()
+            debug_print(f"フィルタリング後のデータ: {len(self.filtered_df)}行")
+
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"フィルタリングエラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def _check_empty_cells(self):
+        """✅ 空欄チェック"""
+        try:
+            empty_cells = []
+            for column in self.filtered_df.columns:
+                # CC列とBCC列は空欄チェックしない
+                if column in ["CC", "BCC"]:
+                    continue
+
+                for idx, value in enumerate(self.filtered_df[column], start=2):
+                    if pd.isna(value) or str(value).strip() == "":
+                        empty_cells.append(f"行{idx}, 列[{column}]が空欄")
+
+            if empty_cells:
+                debug_print("⚠ 空欄エラー: ")
+                for error in empty_cells:
+                    debug_print(f"- {error}")
+                return Status.USER_ERROR
+
+            debug_print("✅ 空欄チェック完了 - 問題なし")
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"空欄チェックエラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def _check_data_types(self):
+        """✅ 型チェック"""
+        try:
+            column_types = {
+                "TORICO": (str, float, int),
+                "インボイス社名": (str,),
+                "販売価格": (float, int),
+                "買取金額": (float, int),
+                "エリア": (str,),
+                "受電地点特定番号": (float, int),
+                "設備名": (str,),
+                "所在地": (str,),
+                "容量": (str, float, int),
+                "受電開始日": (pd.Timestamp,),
+            }
+
+            type_errors = []
+            for column, expected_types in column_types.items():
+                if column not in self.filtered_df.columns:
+                    continue
+
+                for idx, value in enumerate(self.filtered_df[column], start=2):
+                    if pd.isna(value):
+                        continue
+
+                    if not isinstance(value, expected_types):
+                        type_errors.append(
+                            f"行{idx}, 列[{column}]: 型エラー (期待: {expected_types}, 実際: {type(value)})"
+                        )
+
+            if type_errors:
+                debug_print("⚠ 型エラー: ")
+                for error in type_errors:
+                    debug_print(f"- {error}")
+                return Status.USER_ERROR
+
+            debug_print("✅ 型チェック完了 - 問題なし")
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"型チェックエラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+    def _check_email_addresses(self):
+        """✅ メールアドレスチェック"""
+        try:
+            email_columns = ["TO", "CC", "BCC"]
+            email_errors = []
+
+            for column in email_columns:
+                if column not in self.filtered_df.columns:
+                    continue
+
+                for idx, value in enumerate(self.filtered_df[column], start=2):
+                    if pd.isna(value):
+                        continue
+
+                    # メールアドレスをカンマで分割し、空白を取り除く
+                    addresses = [
+                        addr.strip() for addr in str(value).split(",") if addr.strip()
+                    ]
+
+                    # メールアドレス件数が6件以上ならエラー
+                    if len(addresses) > 5:
+                        email_errors.append(
+                            f"行{idx}, 列[{column}]: メールアドレスが6件を超過 ({len(addresses)}件)"
+                        )
+
+                    # 各アドレスが適切な形式かをチェック (3文字以上、@が含まれている)
+                    for addr in addresses:
+                        if not (
+                            isinstance(addr, str) and len(addr) >= 3 and "@" in addr
+                        ):
+                            email_errors.append(
+                                f"行{idx}, 列[{column}]: メールアドレス形式エラー ({addr})"
+                            )
+
+            # TO列のメールアドレスに関しては、TORICO列の値に一致する行で1件でも有効なメールアドレスがあればOK
+            for idx, row in self.filtered_df.iterrows():
+                torico_value = row["TORICO"]
+                to_emails = row.get("TO", "").split(",")
+                valid_email_found = any(
+                    len(addr.strip()) >= 3 and "@" in addr.strip() for addr in to_emails
+                )
+                if torico_value and not valid_email_found:
+                    email_errors.append(
+                        f"行{idx+2}, 列[TO]: TORICO値があるのに有効なメールアドレスがありません"
+                    )
+
+            if email_errors:
+                debug_print("⚠ メールアドレスエラー: ")
+                for error in email_errors:
+                    debug_print(f"- {error}")
+                return Status.USER_ERROR
+
+            debug_print("✅ メールアドレスチェック完了 - 問題なし")
+            return Status.NORMAL
+        except Exception as e:
+            debug_print(f"メールアドレスチェックエラー: {str(e)}")
+            return Status.SYSTEM_ERROR
+
+
+# ✅ Excelファイル処理関数
+def process_excel_file(file_path, sheet_name):
+    debug_print("\n=== Excel処理開始 ===")
+    processor = ToricoProcessor(file_path, sheet_name)
+    return processor.process_data()
+
+
+# ✅ メイン処理
+def main():
+    file_path = r"C:\Users\yukik\Desktop\ex\0223_class\katasample.xlsx"
+    sheet_name = "correct"
+
+    status = process_excel_file(file_path, sheet_name)
+    if status != Status.NORMAL:
+        debug_print("❌ 処理が失敗しました")
+
+
+if __name__ == "__main__":
+    main()
+#メールアドレス件数がまわらない
