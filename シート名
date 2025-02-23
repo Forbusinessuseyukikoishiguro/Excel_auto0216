@@ -1,0 +1,12 @@
+import pandas as pd
+
+# Excelファイルのパス
+file_path = r"C:\Users\yukik\Desktop\ex\0223_class\katasample.xlsx"
+
+# Excelファイルを開いてシート一覧を取得
+try:
+    xls = pd.ExcelFile(file_path)
+    print("利用可能なシート名:", xls.sheet_names)
+except Exception as e:
+    print("エラー発生:", str(e))
+#シート名取得
