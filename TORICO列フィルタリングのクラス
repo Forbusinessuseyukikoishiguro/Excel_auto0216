@@ -1,0 +1,165 @@
+import pandas as pd
+
+# グローバル変数の定義
+input_df = None
+filtered_df = None
+debug_mode = True
+
+
+def debug_print(message):
+    """デバッグ情報を出力する関数"""
+    if debug_mode:
+        print(f"[DEBUG] {message}")
+
+
+class BaseExcelProcessor:
+    """基本的なExcel処理を行う基底クラス"""
+
+    def __init__(self, file_path):
+        """初期化"""
+        self.file_path = file_path
+        debug_print(f"ファイルパスを設定: {file_path}")
+        debug_print("-" * 50)
+
+    def load_sheet(self, sheet_name):
+        """シートを読み込む基本メソッド"""
+        try:
+            df = pd.read_excel(self.file_path, sheet_name=sheet_name)
+            debug_print(f"データフレームの形状: {df.shape}")
+            debug_print(f"列名一覧: {df.columns.tolist()}")
+            return df
+        except Exception as e:
+            debug_print(f"読み込みエラー: {str(e)}")
+            return None
+
+    def analyze_dataframe(self, df, df_name="データフレーム"):
+        """データフレームの基本分析を行うメソッド"""
+        if df is None:
+            debug_print(f"{df_name}が存在しません")
+            return
+
+        debug_print(f"\n=== {df_name}の分析 ===")
+        debug_print(f"- 行数: {len(df)}")
+        debug_print(f"- 列数: {len(df.columns)}")
+        debug_print(f"- 列名: {df.columns.tolist()}")
+
+        debug_print("\n各列のデータ型:")
+        for col in df.columns:
+            debug_print(f"- {col}: {df[col].dtype}")
+
+
+class ToricoProcessor(BaseExcelProcessor):
+    """TOROCO列の処理に特化した派生クラス"""
+
+    def load_input_sheet(self):
+        """inputシートからデータを読み込む"""
+        global input_df
+        try:
+            debug_print("\n=== データ読み込み開始 ===")
+            input_df = super().load_sheet("input")
+
+            if input_df is None:
+                return False
+
+            if "TOROCO" not in input_df.columns:
+                debug_print("警告: TOROCO列が見つかりません")
+                return False
+
+            self.analyze_toroco_column()
+            debug_print("\nデータ読み込み成功")
+            return True
+
+        except Exception as e:
+            debug_print(f"読み込みエラー: {str(e)}")
+            return False
+
+    def analyze_toroco_column(self):
+        """TOROCO列の分析"""
+        if input_df is not None and "TOROCO" in input_df.columns:
+            debug_print("\nTOROCO列の統計情報:")
+            debug_print(f"- 空値の数: {input_df['TOROCO'].isna().sum()}")
+            debug_print(f"- ユニークな値の数: {input_df['TOROCO'].nunique()}")
+            debug_print(f"- ユニークな値: {input_df['TOROCO'].unique().tolist()}")
+
+    def filter_toroco_data(self):
+        """TOROCO列の値が存在する行でフィルタリング"""
+        global filtered_df
+        try:
+            debug_print("\n=== フィルタリング処理開始 ===")
+
+            if input_df is None:
+                debug_print("エラー: 入力データが読み込まれていません")
+                return False
+
+            # フィルタリング前の情報
+            self.analyze_pre_filter_data()
+
+            # フィルタリング実行
+            filtered_df = input_df[input_df["TOROCO"].notna()].copy()
+
+            # フィルタリング結果の分析
+            self.analyze_post_filter_data()
+            return True
+
+        except Exception as e:
+            debug_print(f"フィルタリングエラー: {str(e)}")
+            return False
+
+    def analyze_pre_filter_data(self):
+        """フィルタリング前のデータ分析"""
+        debug_print("\nフィルタリング前の情報:")
+        debug_print(f"- 全行数: {len(input_df)}")
+        debug_print(f"- TOROCO列の空値数: {input_df['TOROCO'].isna().sum()}")
+
+    def analyze_post_filter_data(self):
+        """フィルタリング後のデータ分析"""
+        debug_print("\nフィルタリング結果:")
+        debug_print(f"- フィルタリング後の行数: {len(filtered_df)}")
+        debug_print(f"- 除外された行数: {len(input_df) - len(filtered_df)}")
+        debug_print(f"- 残存率: {(len(filtered_df) / len(input_df) * 100):.1f}%")
+
+        debug_print("\nTOROCO値の分析:")
+        value_counts = filtered_df["TOROCO"].value_counts()
+        debug_print(f"値の出現回数:\n{value_counts}")
+
+        debug_print("\nフィルタリング後の最初の3行:")
+        debug_print(f"\n{filtered_df.head(3)}")
+
+    def get_data_analysis(self):
+        """総合的なデータ分析"""
+        debug_print("\n=== データ分析結果 ===")
+        if input_df is None or filtered_df is None:
+            debug_print("エラー: データが準備できていません")
+            return
+
+        # 基底クラスの分析メソッドを使用
+        super().analyze_dataframe(input_df, "入力データ")
+        super().analyze_dataframe(filtered_df, "フィルタリング後のデータ")
+
+        # TOROCO特有の分析
+        self.analyze_toroco_column()
+
+
+def main():
+    """メイン処理の実行"""
+    file_path = r"C:\Users\yukik\Desktop\ex\0223_class\classtest0223_input.xlsx"
+    processor = ToricoProcessor(file_path)
+
+    try:
+        if processor.load_input_sheet():
+            if processor.filter_toroco_data():
+                processor.get_data_analysis()
+                debug_print("全ての処理が正常に完了しました")
+            else:
+                debug_print("フィルタリング処理に失敗しました")
+        else:
+            debug_print("データ読み込みに失敗しました")
+
+    except Exception as e:
+        debug_print(f"予期せぬエラーが発生: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
+    
+#クラス継承でTORICO列のデータをとるもの：デバックプリントでアウトプット書き込みなし
