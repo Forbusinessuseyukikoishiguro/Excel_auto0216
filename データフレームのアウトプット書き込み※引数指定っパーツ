@@ -1,0 +1,37 @@
+from torico_filter import ToricoFilter
+
+def main():
+    """メイン処理"""
+    try:
+        # ファイルパスを指定してインスタンスを作成
+        excel_path = r"C:\Users\yukik\desktop\ex\0222_vlook\vlook_コピー.xlsx"
+        filter_processor = ToricoFilter(excel_path)
+        
+        print("処理を開始します...")
+        
+        # シートの読み込みとTORICO列のチェック
+        if filter_processor.load_sheet('sheet2'):
+            # フィルタリングの実行
+            if filter_processor.filter_torico():
+                # 結果の保存
+                filter_processor.save_result()
+                
+                # サマリーの表示
+                print("\n=== 処理結果サマリー ===")
+                summary = filter_processor.get_summary()
+                for key, value in summary.items():
+                    print(f"{key}: {value}")
+                    
+                # TORICO値の一覧を表示
+                print("\nTORICO値の一覧:")
+                torico_values = filter_processor.get_torico_values()
+                for value in torico_values:
+                    print(f"- {value}")
+        
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
+
+if __name__ == "__main__":
+    main()
+
+#データフレームのアウトプット：参考OK※簡単
